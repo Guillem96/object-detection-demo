@@ -6,23 +6,12 @@ import numpy as np
 import cv2
 from PIL import Image
 
+import odet.utils.bb as bb_utils
+
 
 def _to_coordinates(rects: np.ndarray) -> np.ndarray:
     x, y, w, h = np.split(rects, 4, axis=1)
     return np.c_[x, y, x + w, y + h]
-
-
-def _normalize_rects(rects: np.ndarray, 
-                     image_size: Tuple[int, int]) -> np.ndarray:
-    x1, y1, x2, y2 = np.split(rects, 4, axis=1)
-
-    h, w = image_size
-
-    x1 = x1 / (w - 1)
-    x2 = x2 / (w - 1)
-    y1 = y1 / (h - 1)
-    y2 = y2 / (h - 1)
-    return np.c_[x1, y1, x2, y2]
 
 
 def ss(im: Image, 
@@ -36,6 +25,7 @@ def ss(im: Image,
     rects = _to_coordinates(rects)
 
     if normalize_bbs:
-        rects = _normalize_rects(rects, im.shape[:2])
+        return bb_utils.normalize_bbs(torch.from_numpy(rects).float(), 
+                                      im.shape[:2])
     
     return torch.from_numpy(rects)

@@ -45,8 +45,8 @@ class BuildExtension(Command):
 
 extensions = [
     Extension(
-        'odet.utils.overlap',
-        ['odet/utils/overlap.pyx']
+        'odet.utils.compute_overlap',
+        ['odet/utils/compute_overlap.pyx']
     ),
 ]
 

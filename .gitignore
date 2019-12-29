@@ -13,5 +13,5 @@ dist/
 /data
 
 # Cython
-overlap.c
+compute_overlap.c
 *.so
