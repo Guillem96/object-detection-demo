@@ -1,8 +1,8 @@
 import torch
 from PIL import Image, ImageDraw
 
-import odet.data.rcnn.ss as ss
-
+import odet.utils.ss as ss
+import odet.utils.bb as bb_utils
 
 def _scale_up_rects(rects, image_size):
     h, w = image_size
@@ -13,13 +13,11 @@ def _scale_up_rects(rects, image_size):
 
 if __name__ == "__main__":
     im = Image.open('images/celebi.png')
-    im = im.resize((350, 250))
-    regions = ss.ss(im)
-    regions = _scale_up_rects(regions, im.size[::-1])
+    im = im.resize((300, 250))
+    regions = ss.ss(im, normalize_bbs=False)
 
     draw = ImageDraw.Draw(im)
     for r in regions.tolist():
         draw.rectangle(r)
 
-    print(regions.shape)
     im.show()

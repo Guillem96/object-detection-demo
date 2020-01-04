@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import List, Union, Tuple
 
 import torch
+import cv2
 from PIL import Image
 
 import odet.utils.bb as bb_utils
@@ -12,15 +13,18 @@ from odet.utils.typing import DetectionInstance
 class LabelMeDataset(torch.utils.data.Dataset):
 
     def __init__(self,
-                 annotation_path: Union[str, Path],
+                 root: Union[str, Path],
+                 images_path: Union[str, Path],
                  classes = List[str],
                  transforms = None):
 
         super(LabelMeDataset, self).__init__()
-        self.classes = ['background'] + classes
+        self.classes = classes
         self.label2idx = {c: i for i, c in enumerate(self.classes)}
-        self.annots_path = Path(annotation_path)
+        self.annots_path = Path(root)
         self.annots = list(self.annots_path.glob('*.json'))
+        
+        self.images_path = Path(images_path)
         
         self.transforms = transforms
 
@@ -33,8 +37,8 @@ class LabelMeDataset(torch.utils.data.Dataset):
             annot_data = json.load(f)
         
         # Load the image
-        image_path = str(self.annots_path / annot_data['imagePath'])
-        im = Image.open(image_path)
+        image_path = str(self.images_path / annot_data['imagePath'])
+        im = cv2.imread(image_path)
         
         # Load detection instances
         shapes = annot_data['shapes']
@@ -50,12 +54,13 @@ class LabelMeDataset(torch.utils.data.Dataset):
         labels, bbs = zip(*boxes)
         
         bbs = torch.FloatTensor(bbs)
-        bbs = bb_utils.normalize_bbs(bbs, im.size[::-1])
         labels = torch.LongTensor([self.label2idx[l] for l in labels])
         
+        instance = dict(image=im, bboxes=bbs, category_id=labels)
         if self.transforms is not None:
-            im = self.transforms(im)
-        return im, dict(boxes=bbs, labels=labels)
+            instance = self.transforms(**instance)
+        
+        return instance
 
     def __len__(self) -> int:
         return len(self.annots)

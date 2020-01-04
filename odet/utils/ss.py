@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, Union
 
 import torch
 import numpy as np
@@ -14,14 +14,19 @@ def _to_coordinates(rects: np.ndarray) -> np.ndarray:
     return np.c_[x, y, x + w, y + h]
 
 
-def ss(im: Image, 
+def ss(im: Union['Image', np.ndarray], 
        normalize_bbs: bool = True) -> torch.FloatTensor:
-    im = np.array(im)[:, :, ::-1] # Image to BGR
     
-    ss = cv2.ximgproc.segmentation.createSelectiveSearchSegmentation()
-    ss.setBaseImage(im)
-    ss.switchToSelectiveSearchFast()
-    rects = ss.process()
+    if isinstance(im, np.ndarray):
+        im = im[:, :, ::-1]
+    else:
+        im = np.array(im)[:, :, ::-1]
+    
+    ss_ = cv2.ximgproc.segmentation.createSelectiveSearchSegmentation()
+    ss_.setBaseImage(im)
+    ss_.switchToSelectiveSearchQuality()
+    
+    rects = ss_.process()
     rects = _to_coordinates(rects)
 
     if normalize_bbs:

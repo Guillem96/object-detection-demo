@@ -1,11 +1,16 @@
+from typing import Callable, Tuple
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+import torchvision.transforms as T
 
 import sklearn.metrics as metrics
 
 import odet.utils.ss as ss
 import odet.models.rcnn as rcnn
+import odet.utils.transforms as odet_T
 
 
 def _crop(im: torch.FloatTensor, 
@@ -16,6 +21,26 @@ def _crop(im: torch.FloatTensor,
             size=(224, 224))
 
     return torch.cat([crop_single(b) for b in boxes], dim=0)
+
+
+def get_transforms(phase: str, 
+                   image_dims: Tuple[int]) -> Callable:
+    tfms = [T.Resize(image_dims)]
+
+    if phase == 'train':
+        tfms.extend([
+            T.RandomRotation(10),
+            odet_T.RandomBlur(p=.4),
+            odet_T.RandomSolarize(p=.3)
+        ])
+    
+    tfms.extend([
+        T.ToTensor(),
+        T.Normalize(mean=[0.485, 0.456, 0.406],
+                    std=[0.229, 0.224, 0.225])
+    ])
+
+    return tfms
 
 
 def train_single_epoch(model: nn.Module,

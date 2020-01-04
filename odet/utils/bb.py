@@ -37,6 +37,23 @@ def denormalize_bbs(boxes: torch.FloatTensor,
     return torch.cat([x1, y1, x2, y2], dim=1)
 
 
+def scale_bbs(boxes: torch.FloatTensor,
+              boxes_im_size: Tuple[int, int],
+              dest_im_size: Tuple[int, int]) -> torch.FloatTensor:
+    
+    factor_w = dest_im_size[0] / float(boxes_im_size[0])
+    factor_h = dest_im_size[1] / float(boxes_im_size[1])
+
+    x1, y1, x2, y2 = boxes.split(1, dim=1)
+
+    x1 *= factor_w
+    x2 *= factor_w
+    y1 *= factor_h
+    y2 *= factor_h
+
+    return torch.cat([x1, y1, x2, y2], dim=1)
+
+    
 def _gen_random_colors(length: int) -> List[Tuple[int]]:
     def rand_color():
         return tuple(random.randint(0, 256) for _ in range(3))
@@ -81,7 +98,8 @@ def to_rcnn_style(boxes):
 
 
 def bbox_transform(search_boxes: torch.FloatTensor, 
-                   gt_boxes: torch.FloatTensor) -> torch.FloatTensor:
+                   gt_boxes: torch.FloatTensor,
+                   normalize: bool = True) -> torch.FloatTensor:
     """Compute bounding-box regression targets for an image."""
 
     Px, Py, Pw, Ph = to_rcnn_style(search_boxes)
@@ -92,11 +110,20 @@ def bbox_transform(search_boxes: torch.FloatTensor,
     tw = torch.log(Gw / Pw)
     th = torch.log(Gh / Ph)
 
-    return torch.stack([tx, ty, tw, th]).t()
+    t = torch.stack([tx, ty, tw, th]).t()
+
+    if normalize:
+        mean = torch.zeros(4)
+        std = torch.tensor([.2] * 4)
+
+        return (t - mean) / std
+    
+    return t
 
 
 def regress_bndboxes(boxes: torch.FloatTensor,
-                     regressors: torch.FloatTensor) -> torch.FloatTensor:
+                     regressors: torch.FloatTensor,
+                     from_normalized: bool = True) -> torch.FloatTensor:
     """
     Apply scale invariant regression to boxes.
     Parameters
@@ -114,7 +141,15 @@ def regress_bndboxes(boxes: torch.FloatTensor,
     Px, Py, Pw, Ph = to_rcnn_style(boxes)
     split = regressors.split(1, dim=1)
     dx, dy, dw, dh = [s.squeeze(-1) for s in split]
-
+    
+    if from_normalized:
+        mean = torch.zeros(4)
+        std = torch.tensor([.2] * 4)
+        dx = dx * std[0] + mean[0]
+        dy = dy * std[1] + mean[1]
+        dw = dw * std[2] + mean[2]
+        dh = dh * std[3] + mean[3] 
+    
     Gx = Pw * dx + Px
     Gy = Ph * dy + Py
     Gw = Pw * torch.exp(dw)
@@ -125,7 +160,7 @@ def regress_bndboxes(boxes: torch.FloatTensor,
     x2 = x + Gw
     y2 = y + Gh
 
-    return torch.stack([x, y, x2, y2]).t()
+    return torch.stack([x, y, x2, y2]).t() 
 
 
 def nms(boxes: torch.FloatTensor, 

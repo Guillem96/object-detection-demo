@@ -1,0 +1,13 @@
+# Torch stack
+pytorch>=1.3.0
+torchvision>=0.4.1
+
+# Command Line Interface
+Click>=7.0
+
+# Image processing
+Pillow>=6.1.0
+albumentations>=0.4.3 # Data aug
+opencv-contrib-python>=4.1.2.30
+
+cython

@@ -15,15 +15,6 @@ import odet.models.rcnn.engine as engine
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-def get_transforms():
-    return T.Compose([
-        T.Resize((224, 224)),
-        T.ToTensor(),
-        T.Normalize(mean=[0.485, 0.456, 0.406],
-                    std=[0.229, 0.224, 0.225])
-    ])
-
-
 def _sample(labels: torch.LongTensor,
             sample_size: int = 64) -> torch.LongTensor:
 
@@ -101,7 +92,7 @@ def train(**args):
 
     ds = data_utils.RCNNDataset(args['annots_path'], 
                                 classes=classes, 
-                                transforms=get_transforms())
+                                transforms=engine.get_transforms('train', (224, 224)))
     train_size = int(len(ds) * 0.9)
     rand_idx = torch.randperm(len(ds)).long()
 
