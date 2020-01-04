@@ -1,6 +1,7 @@
 import time
 import click
 from pathlib import Path
+from typing import Tuple
 
 import torch
 import torch.optim as optim
@@ -109,65 +110,25 @@ def train(**args):
     
 
     optimizer = optim.AdamW(model.parameters(), lr=args['lr'])
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-    optimizer, patience=3, verbose=True)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 
+                                                     patience=3, 
+                                                     verbose=True)
     criterion = efficientdet.FocalLoss()
 
     checkpoint_dir = Path(args['save'])
-    model.train()
-    iteration = 1
+
     for epoch in range(args['epochs']):
-        print("{} epoch: \t start training....".format(epoch))
-        start = time.time()
         
-        result = {}
-        total_loss = 0.
-        steps = 0
-        optimizer.zero_grad()
-        for idx, (images, annotations) in enumerate(train_dataloader):
-            images = images.to(DEVICE)
-            annotations = annotations.to(DEVICE)
-            classification, regression, anchors = model(images)
-            classification_loss, regression_loss = criterion(
-                classification, regression, anchors, annotations)
-            
-            classification_loss = classification_loss.mean()
-            regression_loss = regression_loss.mean()
-            loss = classification_loss + regression_loss
-            
-            if bool(loss == 0):
-                print('loss equal zero(0)')
-                continue
-            loss.backward()
-
-            # Check if we have to backprop the gradients
-            if (idx+1) % args['grad_accumulation_steps'] == 0:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
-                optimizer.step()
-                optimizer.zero_grad()
-
-            total_loss += loss.item()
-            steps += 1
-            if iteration % 100 == 0:
-                print('{} iteration: training ...'.format(iteration))
-                ans = {
-                    'epoch': epoch,
-                    'iteration': iteration,
-                    'cls_loss': classification_loss.item(),
-                    'reg_loss': regression_loss.item(),
-                    'mean_loss': total_loss / steps
-                }
-                for key, value in ans.items():
-                    print('    {:15s}: {}'.format(str(key), value))
-
-            iteration += 1
-        scheduler.step(total_loss / steps)
-        result = {
-            'time': time.time() - start,
-            'loss': total_loss / steps
-        }
-        for key, value in result.items():
-            print('    {:15s}: {}'.format(str(key), value))
+        efficientdet.engine.train_single_epoch(
+            model=model,
+            optimizer=optimizer,
+            loss_fn=criterion,
+            data_loader=train_dataloader,
+            epoch=epoch,
+            device=DEVICE,
+            grad_accumulation_steps=args['grad_accumulation_steps'],
+            scheduler=scheduler)
+        
         arch = type(model).__name__
         state = {
             'arch': arch,
@@ -178,15 +139,6 @@ def train(**args):
         fname = 'efficientdet_{}_{}.pt'.format(args['network'], epoch)
         chkp_path = str(checkpoint_dir / fname)
         torch.save(state, chkp_path)
-    state = {
-        'arch': arch,
-        'num_class': args['num_classes'],
-        'network': args['network'],
-        'state_dict': model.state_dict()
-    }
-    fname = 'Final_efficientdet_{}_{}.pt'.format(args['network'], epoch)
-    chkp_path = str(checkpoint_dir / fname)
-    torch.save(state, chkp_path)
 
 
 @click.command()
@@ -205,7 +157,7 @@ def train(**args):
                help='Batch size for training')
 @click.option('--num-classes', default=5, type=int,
                help='Number of class used in model')
-@click.option('--grad_accumulation_steps', default=1, type=int,
+@click.option('--grad-accumulation-steps', default=1, type=int,
                help='Number of gradient accumulation steps')
 @click.option('--lr', '--learning-rate', default=1e-4, type=float,
                help='initial learning rate')

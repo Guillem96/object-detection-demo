@@ -35,17 +35,24 @@ def get_augmentation(phase, width=512, height=512, min_area=0., min_visibility=0
             albu.HorizontalFlip(p=0.5),
             albu.VerticalFlip(p=0.5),
         ])
-    if(phase == 'test'):
+    
+    if phase == 'test':
         list_transforms.extend([
             albu.Resize(height=height, width=width)
         ])
+    
     list_transforms.extend([
         albu.Normalize(mean=(0.485, 0.456, 0.406),
                        std=(0.229, 0.224, 0.225), p=1),
         ToTensor()
     ])
-    if(phase == 'test'):
+
+    if phase == 'test':
         return albu.Compose(list_transforms)
-    return albu.Compose(list_transforms, bbox_params=albu.BboxParams(format='pascal_voc', min_area=min_area,
-                                                                     min_visibility=min_visibility, label_fields=['category_id']))
+    
+    bbox_params = albu.BboxParams(format='pascal_voc', 
+                                  min_area=min_area,
+                                  min_visibility=min_visibility, 
+                                  label_fields=['category_id'])
+    return albu.Compose(list_transforms, bbox_params=bbox_params)
 
