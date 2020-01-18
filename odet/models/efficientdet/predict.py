@@ -47,15 +47,14 @@ def _predict_single_image(model: torch.nn.Module,
 @torch.no_grad()
 def _predict_video(im: np.ndarray,
                    model: torch.nn.Module,
+                   input_size: int,
                    classes: List[str]) -> np.ndarray:
-    im_input = tfms(image=im.copy()).to(DEVICE)
-    _, labels, boxes = model(im_input['image'].unsqueeze(0))
+    im_input = tfms(image=im.copy())
+    _, labels, boxes = model(im_input['image'].unsqueeze(0).to(DEVICE))
     
-    im = cv2.resize(im, (512, 512))
+    im = cv2.resize(im, (input_size, input_size))
     labels = [classes[i.item()] for i in labels]
-
     return _draw_boxes_cv(im, boxes, labels)
-
 
 
 @click.command()
@@ -65,13 +64,17 @@ def _predict_video(im: np.ndarray,
               type=click.Path(exists=True, dir_okay=False))
 @click.option('--video/--no-video', default=False)
 def main(**args):
+    global tfms
+
     classes = ['treecko', 'mewtwo', 'greninja', 'psyduck', 'solgaleo']
     
     chkp = torch.load(args['checkpoint'], map_location=DEVICE)
     n_classes = chkp['num_class']
     net = chkp['network']
     net_opts = efficientdet.EFFICIENTDET[net]
-
+    tfms = get_augmentation(phase='test',  
+                            width=net_opts['input_size'], 
+                            height=net_opts['input_size']) 
     model = efficientdet.EfficientDet(num_classes=n_classes,
                                       network=net,
                                       W_bifpn=net_opts['W_bifpn'],
@@ -99,6 +102,7 @@ def main(**args):
     if args['video']:
         process_frame_fn = functools.partial(_predict_video, 
                                              model=model, 
+                                             input_size=net_opts['input_size'],
                                              classes=classes)
         cam.webcam(process_frame_fn)
 
