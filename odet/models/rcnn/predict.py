@@ -1,7 +1,9 @@
+import functools
 from typing import List
 
 import click
 
+import cv2
 from PIL import Image
 
 import torch
@@ -12,9 +14,9 @@ import numpy as np
 
 import odet.utils.ss as ss
 import odet.models.rcnn as rcnn
+import odet.utils.camera as cam
 import odet.utils.bb as bb_utils
 import odet.utils.transforms as odet_T
-
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -24,6 +26,7 @@ tfms = T.Compose([
     T.Normalize(mean=[0.485, 0.456, 0.406],
                 std=[0.229, 0.224, 0.225])
 ])
+
 
 def _draw_boxes_cv(im: np.ndarray, 
                    boxes: torch.FloatTensor,
@@ -55,25 +58,37 @@ def crop_and_resize(im: 'Image',
 def _predict_video(im: np.ndarray,
                    model: torch.nn.Module,
                    classes: List[str]) -> np.ndarray:
+    n_regions = 1024
     im_input = cv2.resize(im, (224, 224))
-    regions = ss.ss(im, normalize_bbs=False)[:64]
+    regions = ss.ss(im_input, normalize_bbs=False)[:n_regions]
 
-    im_input = torch.FloatTensor(im_input[:, :, ::-1]).permute(2, 0, 1)
+    im_input = np.flip(im_input, axis=-1).copy()
+    im_input = torch.from_numpy(im_input).permute(2, 0, 1)
+    im_input = im_input.float().div(255.)
     im_input = T.functional.normalize(im_input, 
                                       mean=[0.485, 0.456, 0.406], 
                                       std=[0.229, 0.224, 0.225])
-    crops = crop_and_resize(input_im, regions).to(DEVICE)
 
-    
-    clf_logits, reg_targets = model(crops)
-    
-    scores = clf_logits.softmax(-1)
-    boxes = bb_utils.regress_bndboxes(regions, reg_targets)
+    crops = crop_and_resize(im_input, regions)
+    clf_logits = []
+    reg_targets = []
+    # Feed with batches of 32 regions
+    for i in range(0, n_regions, 32):
+        cc = crops[i: i + 32]
+        c_clf, c_reg = model(cc.to(DEVICE))
+        clf_logits.append(c_clf)
+        reg_targets.append(c_reg)
+
+    scores = torch.cat(clf_logits, dim=0).softmax(-1)
+    boxes = bb_utils.regress_bndboxes(regions.to(DEVICE), torch.cat(reg_targets, dim=0))
     boxes, labels = bb_utils.nms(boxes, scores)
     
     im = cv2.resize(im, (512, 512))
-    labels = [classes[i.item()] for i in labels]
-    boxes = bb_utils.scale_bbs(boxes, (224, 224), im.size)
+    if boxes is None:
+        return im
+
+    labels = [classes[i.item() - 1] for i in labels]
+    boxes = bb_utils.scale_bbs(boxes, (224, 224), im.shape)
 
     return _draw_boxes_cv(im, boxes, labels)
 
@@ -125,6 +140,7 @@ def main(**args):
         im.show()
 
     if args['video']:
+        print('Starting video..')
         process_frame_fn = functools.partial(_predict_video, 
                                              model=model, 
                                              classes=classes)
